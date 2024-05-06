@@ -1,0 +1,728 @@
+---
+title: "Premier League - 2023-24 Insights and Predicitions"
+author: "Suryansh Chauhan"
+date: "2024-04-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+</br>
+</br>
+
+<img src="https://upload.wikimedia.org/wikipedia/en/thumb/f/f2/Premier_League_Logo.svg/1200px-Premier_League_Logo.svg.png" alt="Premier League Logo" title="Premier League Logo" style="width: 300px;"/>
+
+</br>
+</br>
+
+# DATA COLLECTION
+Comprehensive data from excel4soccer.com, offering detailed statistics for the 2023-24 Premier League season up to April 23, 2024.
+
+#### Installing the Packages
+```{r, message=FALSE}
+if (!require("readxl")) install.packages("readxl")
+if (!require("ggplot2")) install.packages("ggplot2")
+if (!require("dplyr")) install.packages("dplyr")
+if (!require("tidyr")) install.packages("tidyr")
+if (!require("caret")) install.packages("caret")
+if (!require("corrplot")) install.packages("corrplot")
+if (!require("randomForest")) install.packages("randomForest")
+```
+
+#### Load the required libraries
+```{r, message=FALSE}
+library(readxl)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(caret)
+library(corrplot)
+library(randomForest)
+```
+
+#### Read the Data
+```{r, message=FALSE}
+player_stats <- read_excel("Premier League 2023-24 Stats.xlsx", sheet = "PlayerStatsExport")
+team_stats <- read_excel("Premier League 2023-24 Stats.xlsx", sheet = "TeamStatsExport")
+league_stats <- read_excel("Premier League 2023-24 Stats.xlsx", sheet = "LeagueTableExport")
+lineup_stats <- read_excel("Premier League 2023-24 Stats.xlsx", sheet = "LineUpExport")
+plays_stats <- read_excel("Premier League 2023-24 Stats.xlsx", sheet = "PlaysExport")
+all_fixtures <- read_excel("Premier League 2023-24 Stats.xlsx", sheet = "AllFixturesExport")
+```
+</br>
+</br>
+</br>
+</br>
+</br>
+
+# EXPLORATORY DATA ANALYSIS (EDA)
+
+#### League Standings and Team Performance
+```{r, message=FALSE}
+ league_stats %>%
+  select(Team, Points, GF, GA, GD, MP) %>%
+  arrange(Points, GD) %>%
+  ggplot(aes(x=reorder(Team, Points + GD/1000), y=Points, fill=Team)) +  
+  geom_col(show.legend = FALSE) +
+  geom_text(aes(label=paste("MP:", MP)), position=position_stack(vjust=0.5), size=3.5) +
+  geom_text(aes(label=Points, y=Points), hjust=-0.2, size=3.5) +
+  coord_flip() +
+  labs(title="Current League Standings", x="Team", y="Points") +
+  theme(axis.text.y = element_text(size=12), 
+        plot.title = element_text(size=16))
+```
+
+Based on this chart depicting the current league standings, we can observe several insights:
+
+1. Top of the Table: Arsenal and Liverpool are tied in points at the top of the league with 74 points each. However, Arsenal is ahead likely due to a superior goal difference or head-to-head record, as the chart only shows points. Both teams have played 33 matches.
+
+2. Close Contenders: Manchester City is just one point behind the leaders with 73 points, and they have a game in hand, which could potentially take them to the top if they win it.
+
+3. Chasing Pack: There’s a significant gap between the top three teams and the rest. Aston Villa sits in fourth with 66 points, followed by Tottenham Hotspur with 60 points. Both teams have played 34 and 32 matches, respectively, indicating that Spurs have games in hand that could improve their standing.
+
+4. Mid-Table Battle: Teams like Newcastle United, Manchester United, West Ham United, and Chelsea are closely packed in the middle of the table, ranging from 50 to 47 points. This suggests a tight competition for the European qualification spots.
+
+5. Relegation Zone: At the bottom, Sheffield United is trailing with only 16 points from 33 matches, which puts them in a precarious position for relegation. Burnley and Luton Town are just above them, with 23 and 25 points respectively, indicating a tough battle to avoid the drop.
+
+6. Games Played (MP): It’s important to note the number of matches played (MP) as it affects the potential points a team can still earn. For example, Manchester City with 32 matches played has the potential to go top if they win their two games in hand over Arsenal and Liverpool.
+
+</br>
+</br>
+        
+#### Visualization of Home vs Away Goals
+```{r, message=FALSE}
+ league_stats %>%
+  select(Team, `Home GF`, `Away GF`) %>%
+  pivot_longer(cols = c(`Home GF`, `Away GF`), names_to = "Home_Away", values_to = "Goals") %>%
+  ggplot(aes(x=reorder(Team, Goals), y=Goals, fill=Home_Away)) +
+  geom_bar(stat="identity", position="dodge") +
+  labs(title="Home vs Away Goals for Each Team", x="Team", y="Goals") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+The bar chart provides a comparison of home versus away goals for each team. Here's what we can gather from this visualization:
+
+1. Higher Home Scoring: Generally, teams have scored more goals at home than away, which is a common trend in football due to the home advantage factor.
+
+2. Top Performers: Arsenal, which is leading in the league standings, also has the highest number of home goals scored. However, they have a relatively lower number of away goals compared to their home tally.
+
+3. Balanced Scoring: Liverpool and Manchester City, the other top teams, have a more balanced scoring record with only a slight variation between home and away goals, which could indicate strong performance regardless of the venue.
+
+4. Struggling Offense: Sheffield United, at the bottom of the league standings, also reflects a poor scoring record both at home and away, which correlates with their league position.
+
+5. Mid-Table Variability: Teams in the middle of the table show varying patterns, with some like West Ham United and Tottenham Hotspur scoring more away than at home, which might be indicative of their playing style or tactical approaches.
+
+6. Potential for Analysis: This data could be useful for predictive analysis by correlating goal-scoring prowess at home and away with potential outcomes in remaining matches.
+
+**In terms of predictive insights:**
+
+1. Home Field Advantage: Teams with a strong home goal record might be more likely to win their remaining home fixtures.
+
+2. Away Form: Teams like Tottenham Hotspur and West Ham United that have performed well away from home could be more likely to secure points in their upcoming away games.
+
+3. Relegation Concerns: The lower goal tallies for teams at the bottom, especially away from home, might indicate they will struggle to pick up the necessary points to avoid relegation.
+
+</br>
+</br>
+
+#### Team Performance by Goal Difference per Match
+```{r, message=FALSE}
+ league_stats %>%
+  select(Team, MP, Win, Draw, Loss, GF, GA) %>%
+  mutate(GoalDifference = GF - GA, GoalDifferencePerMatch = GoalDifference / MP) %>%
+  arrange(desc(GoalDifferencePerMatch)) %>%
+  ggplot(aes(x=reorder(Team, GoalDifferencePerMatch), y=GoalDifferencePerMatch, fill=Team)) +
+  geom_col() +
+  coord_flip() +
+  labs(title="Team Performance by Goal Difference per Match", x="Team", y="Goal Difference per Match") + 
+  theme(legend.position = "none")
+```
+
+This bar chart presents each Premier League team's performance in terms of goal difference per match for the season. The goal difference per match is a good indicator of a team's overall performance, as it accounts for both offensive and defensive capabilities. Here are some insights:
+
+1. Leading Teams: Arsenal and Manchester City are at the top, which aligns with their standing in the league table. A higher goal difference per match suggests they consistently outscore their opponents, a key factor in their success.
+
+2. Competitive Mid-Table: There is a cluster of teams with a goal difference per match close to zero. This suggests that many matches involving these teams are closely contested, with teams either winning by a small margin or drawing frequently.
+
+3. Struggling at the Bottom: Sheffield United has a negative goal difference per match, indicating they concede more goals than they score on average, contributing to their position at the bottom of the table.
+
+4. Consistency in Performance: The chart likely reflects consistency over the season, as teams with a higher goal difference per match have been consistently better at both scoring goals and preventing them.
+
+5. Predictive Insights: Teams with a positive and high goal difference per match would be expected to continue performing well. Conversely, teams with a low or negative goal difference per match might struggle unless they can improve either their offense or defense (or both).
+
+</br>
+</br>
+
+#### Team Fouls and Red Cards
+```{r, message=FALSE}
+ team_stats %>%
+  group_by(Team) %>%
+  summarise(TotalFouls = sum(foulsCommitted),
+            YellowCards = sum(yellowCards),
+            RedCards = sum(redCards)) %>%
+  gather(key = "Type", value = "Count", -Team) %>%
+  ggplot(aes(x = Team, y = Count, fill = Type)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  coord_flip() +
+  labs(title = "Total Fouls and Cards by Team", x = "Team", y = "Total Count") +
+  theme(legend.position = "bottom")
+```
+
+The bar chart shows the total number of fouls committed and cards received (both yellow and red) by each team in the Premier League. Here are the insights:
+
+1. Disciplinary Issues: Teams with a high number of fouls and cards might have disciplinary issues or a more aggressive playing style. This could lead to suspensions and a weakened squad in subsequent matches.
+
+2. Top of the Discipline Chart: The team with the highest number of fouls committed is not necessarily the one with the most cards, which suggests that while they may commit many fouls, they may not all be of a serious nature.
+
+3. Fouls vs. Cards: Some teams have a relatively high number of fouls but fewer cards, which could indicate effective management of fouls during the game, avoiding bookings.
+
+4. Red Cards Impact: Red cards can significantly impact team performance as they lead to suspensions and playing with fewer players during a match. Teams with more red cards might be at a tactical disadvantage in some games.
+
+5. Predictive Insight: The teams with higher fouls and card counts might be at risk in future games, especially if key players are prone to receiving cards. This could affect team selection and strategy.
+
+6. Fair Play: Teams with fewer fouls and cards may be seen as playing a cleaner game, which can be advantageous as it reduces the risk of suspensions and penalties.
+
+</br>
+</br>
+
+#### Top Scorers in the Premier League
+```{r, message=FALSE}
+ player_stats %>%
+  select(Name, Team, Position, totalGoals, goalAssists, shotsOnTarget, totalShots, foulsCommitted, yellowCards) %>%
+  arrange(desc(totalGoals)) %>%
+  head(10) %>%
+  ggplot(aes(x=reorder(Name, totalGoals), y=totalGoals, fill=Position)) +
+  geom_col(show.legend = TRUE) +
+  geom_text(aes(label=Team), position=position_stack(vjust=0.5), color="white", size=3.5) +
+  coord_flip() +
+  labs(title="Top Scorers in the Premier League", x="Player", y="Total Goals")
+```
+
+The bar chart showcases the top scorers in the Premier League for the current season, along with their position (either forward or midfielder) and the total number of goals scored. Here’s what we can deduce:
+
+1. Erling Haaland: A forward from Manchester City, is leading the chart with the highest number of goals.
+
+2. Positional Diversity: Both forwards and midfielders are among the top scorers, indicating that goal-scoring is not limited to traditional striker roles.
+
+3. Team Representation: Manchester City has two players among the top scorers, suggesting a strong offensive team.
+
+4. Midfield Contributions: Notably, a midfielder from Chelsea is high up on the list, highlighting the importance of goals from midfield positions.
+
+5. Player Impact: Players like Mohamed Salah from Liverpool continue to have a significant impact, as indicated by their goal tally.
+
+6. Strategic Insight: The distribution of goals among different players and positions can offer insights into team strategies. Teams with multiple players on the list may have a diversified attack, making them less predictable and more difficult to defend against.
+
+7. Predictive Analysis: This chart can be used for predictive analysis in terms of future match outcomes. Teams with top scorers are likely to continue finding the back of the net, which could influence the outcomes of their upcoming fixtures.
+
+8. Scoring Patterns: Analysing the scoring patterns of these players, including the type of goals and the match situations in which they score, can provide deeper insights into their effectiveness and consistency.
+
+</br>
+</br>
+
+#### Team Performance Over the Season for Top 3 Teams (based off our previous findings)
+```{r, message=FALSE}
+top_teams <- league_stats %>%
+  arrange(desc(Points)) %>%
+  slice(1:3) %>%
+  pull(Team)
+top_team_stats <- team_stats %>%
+  filter(Team %in% top_teams)
+ggplot(data = top_team_stats, aes(x = `Date Time (US Eastern)`, y = `Home Goal` + `Away Goal`, group = Team, color = Team)) +
+  geom_line() +
+  labs(title = "Team Performance Over the Season for Top 3 Teams", x = "Date", y = "Total Goals Scored")
+```
+  
+The line graph shows the total number of goals scored by the top three teams in the Premier League over the season, with data points likely representing each match played. Here's the analysis:
+
+1. Goal Fluctuations: All three teams show fluctuations in their goal-scoring throughout the season, which is normal due to varying levels of competition and form.
+
+2. Consistent Performers: Manchester City seems to have the most consistent goal-scoring performance, with fewer dips and peaks compared to Arsenal and Liverpool.
+
+3. Scoring Peaks: Each team has moments where they have scored a high number of goals in a match, which could coincide with playing against lower-ranked teams or particularly strong performances.
+
+4. Dips in Form: The dips, where the goal count is low or zero, could correspond to playing stronger defenses, away games, or possible off-days in terms of performance.
+
+5. End of Season Performance: There is a notable increase in goals scored as the season progresses into April for Manchester City, which could be a critical factor in their challenge for the title.
+
+6. Comparison of the Top Teams: The comparative analysis between the teams can provide insights into their chances of winning the league based on consistency and peak performance.
+
+7. Predictive Potential: The trajectory of the lines towards the most recent dates can help predict which team might end the season strongly. Teams showing an upward trend in goal-scoring as the season closes may have a better chance of finishing at the top.
+
+8. Goal Scoring as an Indicator: While goal-scoring is a crucial part of winning matches, it is not the sole indicator of success. Defensive records would also need to be considered for a comprehensive understanding of overall team performance.
+
+</br>
+</br>
+
+#### Correlation of Player Performance Metrics
+```{r, message=FALSE}
+player_stats %>%
+  select(totalGoals, goalAssists, shotsOnTarget, totalShots, foulsCommitted, yellowCards, redCards) %>%
+  cor(use = "complete.obs") %>%
+  corrplot::corrplot(method = "circle", type = "upper", order = "hclust",
+                     tl.col = "black", tl.srt = 25, 
+                     title = "Correlation of Player Performance Metrics")
+```
+
+1. Positive Correlations: Larger circles indicate stronger correlations. For example, a strong positive correlation exists between totalGoals and shotsOnTarget, suggesting that as shots on target increase, total goals typically increase too.
+
+2. Negative Correlations: Smaller or differently colored circles (like red) suggest negative correlations. RedCards may negatively correlate with goalAssists or totalGoals.
+
+3. No Correlation: Very small or absent circles denote little to no correlation between variables.
+
+4. Performance Metrics: Metrics such as totalGoals, goalAssists, and shotsOnTarget are positively correlated, reflecting their relation to offensive actions.
+
+5. Disciplinary Actions: Metrics like foulsCommitted, yellowCards, and redCards are related since fouls increase the likelihood of receiving a card.
+
+6. Applications: This corrplot can help in predictive modeling and strategic planning in sports analytics, aiding in identifying player performance trends and team strategy adjustments.
+
+</br>
+</br>
+</br>
+</br>
+</br>
+</br>
+</br>
+
+# DESCRIPTIVE STATISTICS
+
+#### League Performance Metrics 
+```{r, message=FALSE}
+league_stats %>%
+  select(Points, MP, Win, Draw, Loss, GF, GA, GD, `Clean Sheets`) %>%
+  summary() %>%
+  knitr::kable(caption = "League Performance Metrics")
+```
+
+Here are some notable points from the league performance metrics that could provide interesting insights:
+
+1. Top Performers: The maximum points a team has accumulated is 74, with the top teams managing up to 23 wins, indicating a strong lead by the frontrunners.
+
+2. Tight Competition: The median points value is 43.5, which shows that the league is quite competitive around the mid-table, with half the teams within a close range of each other.
+
+3. Striking Goal Differences: There's a substantial range in goal difference, from a low of -57 to a high of +51, highlighting the disparity between the strongest and weakest teams in terms of offensive and defensive performance.
+
+4. Defensive Strengths: The best defensive record boasts a mere 26 goals conceded and up to 14 clean sheets, showcasing exceptional defensive capabilities.
+
+</br>
+</br>
+
+#### Key Team Statistics (each game)
+```{r, message=FALSE}
+team_stats %>%
+  select(possessionPct, totalShots, shotsOnTarget, wonCorners, foulsCommitted, accuratePasses, accurateCrosses, effectiveTackles ) %>%
+  summary() %>%
+  knitr::kable(caption = "Key Team Statistics (each game)")
+```
+
+Here's a summary of the key per-game team statistics in the league that stand out:
+
+1. Possession Extremes: The range of possession percentages shows a stark contrast between teams, with the minimum at 17.1% and the maximum at 82.9%, highlighting the difference in play styles.
+
+2. Shooting Prowess: There's a team that managed a remarkable 37 total shots in a game, with another team achieving 15 shots on target, underscoring some exceptional attacking displays.
+
+3. Corner Battles: One team won up to 17 corners in a single game, indicating dominance in attacking flanks or persistent pressure on the opposition.
+
+4. Passing Accuracy: On the higher end, a team completed up to 944 accurate passes, suggesting a highly possession-oriented strategy.
+
+5. Defensive Actions: The maximum of 26 effective tackles in a game showcases a strong defensive effort, potentially against a very attacking team.
+
+</br>
+</br>
+
+#### Player Performance Metrics
+```{r, message=FALSE}
+player_stats %>%
+  select(`Total Play Time(min)`, Appearances, totalGoals, goalAssists, shotsOnTarget, totalShots, foulsCommitted, yellowCards, redCards) %>%
+  summary() %>%
+  knitr::kable(caption = "Player Performance Metrics")
+```
+
+
+Certain statistics stand out and can be intriguing discussion points:
+
+1. Playing Time: The vast range in 'Total Play Time' from 0 to 3337 minutes reflects the varying roles players have in their teams, from unused substitutes to ever-presents.
+
+2. Goal Contributions: A player has made a significant impact with a maximum of 20 goals and 13 assists, showcasing standout offensive talent.
+
+3. Shooting Accuracy: The highest number of shots on target stands at 44, pointing to a player with an exceptional ability to test goalkeepers.
+
+4. Discipline: On the discipline side, one player has accumulated as many as 13 yellow cards, and another has 2 red cards, which might indicate a more aggressive style of play or poor discipline.
+
+5. Goal Attempts: A high number of total shots, maxing out at 100, indicates players who are very active in attempting to score.
+
+</br>
+</br>
+</br>
+</br>
+</br>
+</br>
+</br>
+
+# PERFORMANCE METRICS
+
+#### Player Efficiency Analysis
+```{r, message=FALSE}
+player_stats %>%
+  filter(totalGoals >= 5) %>% 
+  mutate(ShootingAccuracy = shotsOnTarget / totalShots, 
+         GoalConversion = totalGoals / totalShots, 
+         AssistPerGame = goalAssists / Appearances) %>%
+  select(Name, ShootingAccuracy, GoalConversion, AssistPerGame) %>%
+  drop_na(ShootingAccuracy, GoalConversion, AssistPerGame) %>%  
+  arrange(desc(GoalConversion)) %>%
+  head(10) %>%
+  knitr::kable(caption = "Top 10 Players by Goal Conversion Rate (Minimum 5 Goals)")
+```
+
+These top players are not just scoring; they're doing so with remarkable efficiency and contributing to their team's overall attack:
+
+1. Chris Wood stands out not just for his goal conversion but also for his impressive shooting accuracy, making him a critical asset in front of goal.
+
+2. Elijah Adebayo shows significant efficiency with a conversion rate of over 32%, which is remarkable for a forward, especially in a high-pressure league.
+
+3. Alexander Isak, Taiwo Awoniyi, and Diogo Jota balance their roles well between scoring and assisting, which makes them versatile threats to any defense.
+
+4. Hwang Hee-Chan and Jean-Philippe Mateta demonstrate that even with lower shooting accuracy, effective finishing can make a substantial impact, as reflected in their goal conversion rates.
+
+5. Cole Palmer's high assist rate coupled with his goal-scoring ability makes him an exceptional talent, indicating his capability to influence the game both by scoring and setting up goals.
+
+6. Rasmus Højlund and Callum Wilson maintain high shooting accuracies and respectable goal conversions, underscoring their precision and clinical nature in front of goal.
+
+</br>
+</br>
+
+#### Player Endurance and Game Involvement Metrics
+```{r, message=FALSE}
+player_stats %>%
+  filter(Position != "Goalkeeper", Appearances >= 10) %>%
+  mutate(
+    PlayTimePerGame = `Total Play Time(min)` / Appearances,
+    ImpactScore = (totalGoals + goalAssists + foulsSuffered - foulsCommitted) / Appearances 
+  ) %>%
+  select(Name, Team, Position, PlayTimePerGame, ImpactScore) %>%
+  drop_na(PlayTimePerGame, ImpactScore) %>%
+  arrange(desc(ImpactScore), desc(PlayTimePerGame)) %>%
+  head(10) %>%
+  knitr::kable(caption = "Top 10 Outfield Players by Play Time Per Game and Revised Impact Score (Min 10 Appearances)")
+
+```
+
+These players are key contributors for their teams, combining playtime with high on-field impact:
+
+1. Michael Olise's high impact score with relatively lower playtime per game illustrates his ability to make significant contributions efficiently within limited minutes.
+
+2. James Maddison not only plays a lot of minutes but also impacts games deeply, which speaks volumes about his fitness and technical skill.
+
+3. Jack Grealish, known for his dribbling and ability to draw fouls, uses his playtime effectively to impact the game’s flow and create opportunities.
+
+4. Bruno Guimarães showcases not just stamina but also a high level of involvement in playmaking and defensive actions, reflecting his comprehensive midfield capabilities.
+
+5. Phil Foden and Jordan Ayew represent key offensive elements for their teams, with Foden known for his agility and precise finishing, while Ayew contributes with both goals and assists.
+
+6. João Pedro and Mohammed Kudus highlight the role of dynamic forwards who can change the course of a game with their direct involvement in goal-scoring opportunities.
+
+</br>
+</br>
+
+#### Goalkeeper Performance Metrics
+```{r, message=FALSE}
+player_stats %>%
+  filter(Position == "Goalkeeper") %>%
+  select(Name, Team, shotsFaced, saves) %>%
+  mutate(SaveRate = saves / shotsFaced) %>%
+  drop_na(shotsFaced, saves) %>%
+  arrange(desc(saves)) %>%
+  head(10) %>%
+  knitr::kable(caption = "Goalkeeper Performance")
+```
+
+These goalkeepers highlight a blend of shot-stopping ability and consistency, crucial for their teams' defensive strength:
+
+1. Thomas Kaminski (Luton Town) stands out with the highest number of shots faced (493) and saves made (135). Although his save rate is relatively lower, the volume underscores his critical role in a team facing frequent attacks.
+
+2. Bernd Leno (Fulham) and Alphonse Areola (West Ham United) both demonstrate notable efficiency with save rates exceeding 30%. Leno's ability to maintain high performance despite a large number of shots highlights his exceptional skill and importance to Fulham.
+
+3. André Onana (Manchester United), with 462 shots faced and a save rate around 27%, reflects significant defensive workload and solid goalkeeping under pressure, crucial for a team with high expectations.
+
+4. José Sá (Wolverhampton Wanderers) shows impressive efficiency with a save rate of over 31%, making him one of the more effective goalkeepers, especially given he faced fewer shots compared to others in the top ten.
+
+5. Jordan Pickford (Everton), facing over 400 shots but with the lowest save rate (about 25%), might indicate a challenging season for Everton’s defense, spotlighting his role as a frequently tested goalkeeper in the league.
+
+</br>
+</br>
+
+#### Team Offensive Performance Metrics
+```{r, message=FALSE}
+team_stats %>%
+  group_by(Team) %>%
+  summarise(ShotsPerGame = mean(totalShots),
+            ShootingAccuracy = sum(shotsOnTarget) / sum(totalShots)) %>%
+  arrange(desc(ShotsPerGame), desc(ShootingAccuracy)) %>%
+  knitr::kable(caption = "Team Offensive Performance Metrics")
+```
+
+These insights not only show how teams perform but also hint at their tactical setups and effectiveness in turning shots into goals, crucial for understanding their potential for success in the league:
+
+1. High Volume vs. High Efficiency: Liverpool leads in shots per game, suggesting an aggressive offensive strategy. However, Manchester City, while taking fewer shots, has the highest shooting accuracy among the top teams. This contrast highlights different tactical approaches: Liverpool focuses on volume, while Manchester City emphasizes precision.
+
+2. Shooting Accuracy Leaders: Chelsea and Brighton & Hove Albion have the highest shooting accuracies (39.50% and 38.80%, respectively), which is impressive given that they don't lead in shots per game. This suggests that both teams are particularly effective at creating quality chances rather than a larger quantity of less promising attempts.
+
+3. Mid-Table Efficiency: Despite being a mid-table team in terms of shots per game, Brighton's shooting accuracy rivals that of the top teams. This indicates that while they may not attack as frequently, they make their opportunities count, which could be a critical factor in tight matches.
+
+4. Consistency Across Metrics: Manchester City and Arsenal exhibit a strong combination of both high shots per game and above-average shooting accuracies. This balance likely contributes significantly to their success in the league, as it implies they consistently create and convert scoring opportunities.
+
+5. Underperformers: At the lower end, Sheffield United has the lowest shots per game (9.21) but maintains a relatively high shooting accuracy (37.17%). This could suggest a cautious approach to offense, opting for quality over quantity, but it might also indicate a struggle to create scoring opportunities.
+
+</br>
+</br>
+
+#### Team Possession and Passing Metrics
+```{r, message=FALSE}
+team_stats %>%
+  group_by(Team) %>%
+  summarise(AveragePossession = mean(possessionPct),
+            PassingAccuracy = mean(passPct)) %>%
+  arrange(desc(AveragePossession), desc(PassingAccuracy)) %>%
+  knitr::kable(caption = "Team Possession and Passing Metrics")
+```
+
+These metrics not only reflect the tactical foundations of each team but also highlight the correlation between possession, passing accuracy, and likely success in the league standings:
+
+1. Manchester City's Dominance: Manchester City leads with the highest average possession (66.08%) and passing accuracy (89.38%), illustrating their control over games and exceptional technical skill in retaining the ball and accurately distributing it.
+
+2. High Possession, High Precision: Tottenham Hotspur and Brighton & Hove Albion also show strong possession stats, coupled with high passing accuracies. This indicates a style focused on ball control and effective playmaking, with Brighton’s accuracy (88.75%) nearly rivaling that of the top teams.
+
+3. Top Four Cohesion: Liverpool and Arsenal, both with over 59% possession and above 84% passing accuracy, underscore their strategies of controlling games through sustained possession and robust passing networks, essential for their attacking approaches.
+
+4. Contrast in Styles: Teams like Newcastle United and Manchester United have moderate possession stats (around 51%), but their lower passing accuracies suggest a possibly more direct or transitional style of play compared to the top possession teams.
+
+5. Struggles at the Bottom: Sheffield United exhibits the lowest average possession (35.10%) and passing accuracy (69.70%), highlighting potential areas for improvement in ball control and retention to enhance their competitive edge.
+
+</br>
+</br>
+
+#### Team Defensive Metrics
+```{r, message=FALSE}
+team_stats %>%
+  group_by(Team) %>%
+  summarise(
+    TotalBlockedShots = sum(blockedShots),
+    TackleSuccessRate = mean(tacklePct),
+    TotalEffectiveClearance = sum(effectiveClearance)
+  ) %>%
+  arrange(desc(TotalBlockedShots)) %>%
+  knitr::kable(caption = " Team Defensive Performance Metrics")
+
+```
+
+These metrics reflect the various defensive approaches across the league, showing which teams excel in specific defensive actions and how they manage to oppose their opponents' offensive efforts:
+
+1. High Block Count: Liverpool leads with the highest total of blocked shots at 188, closely followed by Manchester City at 186 and Arsenal at 182. This indicates these teams' strong defensive positioning and their ability to disrupt opponents' attacks effectively.
+
+2. Effective Clearances: Sheffield United, despite having the lowest blocked shots, tops the chart in effective clearances with a total of 904. This suggests a defensive strategy heavily reliant on clearing the ball from dangerous areas, potentially due to facing frequent attacking pressure.
+
+3. Tackle Success: West Ham United boasts the highest tackle success rate at about 62.35%, showing a proficiency in winning back possession through tackles. Tottenham Hotspur also shows high tackle efficiency, tying into their overall defensive strategy.
+
+4. Comprehensive Defense: Manchester United, although not leading in blocked shots, has made the most substantial number of effective clearances (725), indicating a robust defensive setup that effectively reduces goal threats by clearing the ball from critical areas.
+
+5. Defensive Disparity: Comparatively, teams like Burnley and Wolverhampton Wanderers, with fewer blocked shots and lower tackle success rates, might be focusing on other defensive tactics or may need to enhance their blocking and tackling capabilities to prevent opponents' chances.
+
+</br>
+</br>
+</br>
+</br>
+</br>
+</br>
+</br>
+
+# PREDICTIVE MODELING
+
+```{r, message=FALSE}
+
+set.seed(123)
+
+# Prepare data 
+league_model_data <- league_stats %>%
+  select(Team, Points, MP, GF, GA, GD, `Home Win`, `Away Win`, `Home Loss`, `Away Loss`) %>%
+  na.omit()
+
+# Split data into training and testing sets 
+train_indices <- createDataPartition(league_model_data$Points, p=0.8, list=FALSE)
+train_data <- league_model_data[train_indices, ]
+test_data <- league_model_data[-train_indices, ]
+
+# Fit linear regression model
+linear_model <- lm(Points ~ MP + GF + GA + GD + `Home Win` + `Away Win` + `Home Loss` + `Away Loss`, data=train_data)
+summary(linear_model)
+
+```
+
+In the predictive modeling setup using linear regression, the analysis focuses on how well various team performance metrics predict the total points accumulated by teams in the league. The data preparation involved selecting relevant variables such as total points, matches played (MP), goals for (GF), goals against (GA), goal difference (GD), and wins and losses at home and away. This dataset was then split into training and testing sets for model training.
+
+The linear regression model trained on the data identifies significant relationships between points and several variables:
+
+1. Home Win and Away Win: Both variables have positive coefficients (2.07277 and 2.27171 respectively), indicating that each additional home or away win is associated with an increase in points, as wins directly contribute to league standings.
+2. Home Loss and Away Loss: These variables show negative coefficients (-0.86606 and -1.00557 respectively), suggesting that losses, whether at home or away, decrease the team's points.
+
+The variable GD (Goal Difference) was excluded from the model due to singularity issues, because goal difference is a linear combination of goals for and goals against, making it redundant in the presence of those other variables.
+
+Statistical significance is evident as the p-values for Home Win, Away Win, Home Loss, and Away Loss are well below the 0.05 threshold, indicating that these are statistically significant predictors of total points.
+
+Model fit is excellent:
+
+1. Residual Standard Error: The model has a residual standard error of 1.135 on 8 degrees of freedom, which measures the average distance that the observed points deviate from the regression line.
+2. Multiple R-squared: The value of 0.998 suggests that the model explains 99.8% of the variability in the response variable (points) with the given predictors.
+3. F-Statistic: An F-statistic of 571.7 with a very low p-value (3.703e-10) strongly rejects the null hypothesis that the model with no predictors fits the data as well as the proposed model, indicating a very good fit of the model to the data.
+
+</br>
+</br>
+
+```{r, message=FALSE}
+
+# Predicting on test data
+predictions <- predict(linear_model, newdata=test_data)
+
+# Create a data frame with actual points and predicted points
+results <- data.frame(
+  Team = test_data$Team,
+  ActualPoints = test_data$Points,
+  PredictedPoints = predictions
+)
+
+# Print the results table
+print(results)
+
+```
+
+The results table shows the actual and predicted points for the test data, providing an assessment of the predictive model's accuracy when applied to new, unseen data. Here's a summary of the model's predictions compared to the actual outcomes:
+
+1. Tottenham Hotspur: The model predicted 60.498 points, very close to the actual 60 points. This indicates a highly accurate prediction for Tottenham Hotspur.
+2. West Ham United: Predicted to score 48.040 points against the actual 48 points. Again, the prediction is remarkably accurate, demonstrating the model's effectiveness.
+3. Crystal Palace: The model predicted 35.318 points, closely matching the actual 36 points. Although there's a slight discrepancy, the prediction is still quite close to the actual result.
+4. Everton: Predicted to score 36.985 points, slightly higher than the actual 30 points. This is the least accurate prediction among the ones listed, suggesting the model may not have captured all factors affecting Everton's lower performance or there were unexpected downturns not reflected in the data.
+
+</br>
+</br>
+
+```{r, message=FALSE}
+
+library(ggplot2)
+ggplot(results, aes(x = ActualPoints, y = PredictedPoints, color = Team)) +
+  geom_point(size = 3) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red") + 
+  labs(title = "Comparison of Predicted Points vs. Actual Points Including Teams",
+       x = "Actual Points",
+       y = "Predicted Points") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+
+```
+
+The comparison between the predicted points and actual points for several teams is visualized. The dashed red line represents the line of perfect prediction, where the predicted points equal the actual points.
+
+Key observations from the plot are:
+
+1. Tottenham Hotspur is almost exactly on the line of perfect prediction, showing the model's accurate forecasting for this team.
+2. West Ham United also sits close to the line, indicating a good prediction match by the model.
+3. Crystal Palace and Everton are below the line, showing that the model overestimated their points. The model's prediction for Everton notably deviates from its actual points, suggesting potential areas in the model that could be improved for future predictions.
+4. The scatter of points around the line of perfect prediction demonstrates the model's overall effectiveness but also highlights the variability in its predictive accuracy across different teams.
+
+</br>
+</br>
+
+```{r, message=FALSE}
+
+# Calculate the average points per game so far
+league_stats <- league_stats %>%
+  mutate(AvgPointsPerGame = Points / MP)
+
+# Calculate remaining matches
+league_stats <- league_stats %>%
+  mutate(RemainingMatches = 38 - MP)
+
+# Predict future points based on average points per game
+league_stats <- league_stats %>%
+  mutate(PredictedPoints = AvgPointsPerGame * RemainingMatches)
+
+# Calculate final predicted points
+league_stats <- league_stats %>%
+  mutate(FinalPoints = Points + PredictedPoints)
+
+# Order by the predicted final points
+league_stats <- league_stats %>%
+  arrange(desc(FinalPoints), desc(GD), desc(GF))
+
+# Display the results
+print(league_stats %>% select(Team, Points, RemainingMatches,PredictedPoints, FinalPoints))
+
+```
+
+The analysis conducted utilizes a simple prediction model to forecast the final points tally for teams in the league based on their performance to date. By calculating the average points per game (AvgPointsPerGame) and extrapolating this over the remaining matches (RemainingMatches), the model provides an estimate of the points each team might expect to gain (PredictedPoints) by the end of the season.
+
+The teams are then ranked based on their final predicted points tally (FinalPoints), which is the sum of their current points (Points) and the additional points they are predicted to earn (PredictedPoints). The ordering of the teams takes into account their predicted final points, goal difference (GD), and goals for (GF) to break any ties.
+
+From this model, Manchester City is projected to finish with the highest points at approximately 86.7, followed closely by Arsenal and Liverpool, both estimated to conclude the season around 85.2 points. It's important to note the limitations of this approach, as it assumes that teams will continue to earn points at the same rate, which may not account for future fluctuations in form, injuries, or changes in competition level. Despite this, the model offers a straightforward method for estimating end-of-season standings based on current performance data.
+
+</br>
+</br>
+
+```{r, message=FALSE}
+
+# Plotting the results
+ggplot(league_stats, aes(x = reorder(Team, -FinalPoints), y = FinalPoints, fill = Team)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +  
+  labs(title = "Predicted Final Premier League Points", x = "Team", y = "Final Points") +
+  theme_minimal() +
+  theme(legend.position = "none") 
+
+```
+
+The bar chart visualizes the predicted final points for the Premier League teams. The chart is arranged in ascending order.
+
+Observations from the chart are:
+
+1. Manchester City is predicted to finish with the highest points, reinforcing their status as a dominant team in the league.
+2. Arsenal and Liverpool are shown to be in a close race for the top positions, highlighting their successful seasons.
+3. Aston Villa is somewhat of a surprise, being predicted to finish higher than teams like Tottenham Hotspur and Manchester United, which could be due to their current average points per game being projected forward.
+4. Sheffield United, the team with least points, may face challenges for the rest of the season if their current form continues.
+
+</br>
+</br>
+
+Predicted Premier League 2023-24 Winner: **Manchester City**
+
+</br>
+</br>
+
+<img src="https://upload.wikimedia.org/wikipedia/en/thumb/e/eb/Manchester_City_FC_badge.svg/1200px-Manchester_City_FC_badge.svg.png" alt="Manchester City FC Badge" title="Manchester City FC Badge" style="width: 300px;"/>
+
+</br>
+</br>
+</br>
+
+# ETHICAL CONSIDERATIONS
+
+<br>
+
+In the context of the project, several ethical considerations are imperative to ensure responsible data usage, privacy, and fairness:
+
+1. Data Privacy and Anonymization: While sports data is often public, it is crucial to handle individual player data with care, ensuring it remains anonymized in any dissemination. Detailed data about individual performance should not inadvertently reveal sensitive personal information that players might wish to keep private.
+
+2. Fairness and Bias: Predictive models must be scrutinized for biases that may affect fairness. For instance, a model might undervalue a team due to historical data that does not reflect current capabilities or changes in team dynamics. Ensuring that the model is updated and reflects the current context is key to maintaining fairness.
+
+3. Implications for Stakeholders: Analytical findings can significantly influence decisions related to player contracts, team management, and strategy. There is an ethical responsibility to present data and conclusions transparently to avoid misinterpretation that could harm the livelihoods of players or the reputation of teams.
+
+4. Responsible Data Usage: All data should be used responsibly. Analysts should not manipulate or cherry-pick data to create narratives that could be misleading. Maintaining the integrity of the data and the methods used for analysis is paramount.
+
+5. Public Perception and Communication: How findings are communicated to fans and the public can shape perceptions of teams and players. Care should be taken to avoid unduly negative or positive portrayals based on predictive models, which are inherently probabilistic and not certainties.
+
+6. Consent and Rights: When using data that is not public, it's important to ensure that the appropriate consents have been obtained. Players and teams have rights to their performance data, and their wishes and legal agreements regarding data usage must be respected.
+
+7. Mitigating Negative Impact: Before implementing analytics-driven decisions, it's crucial to consider and mitigate potential negative impacts on the well-being of players and teams, ensuring that the human element of sports is not overshadowed by numbers and statistics.
+
+Throughout the project, it's essential to adhere to ethical standards and best practices, reflecting on the broader implications of the work and striving for an approach that respects all stakeholders involved in the realm of sports analytics.
+  
+
